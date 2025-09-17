@@ -313,3 +313,5 @@ btn_frecuencias_intervalos = tk.Button(root, text="Calcular Frecuencias por Inte
 btn_frecuencias_intervalos.pack(pady=10)
 
 root.mainloop()
+
+#hola a todos
