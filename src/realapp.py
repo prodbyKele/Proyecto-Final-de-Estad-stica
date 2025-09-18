@@ -4,9 +4,12 @@ import pandas as pd
 import numpy as np
 import math
 from scipy import stats
-from scipy.stats import skew, kurtosis
+from scipy.stats import skew, kurtosis, bernoulli, binom, poisson
 
 df_global = None
+
+
+##### ÁREA DE DISTRIBUCIONES #####
 
 ### FUNCION PARA CARGAR EL ARCHIVO .CSV ###
 def cargar_archivo():
@@ -563,6 +566,354 @@ def frecuencias_intervalos():
   btn_formas.pack(side="left", padx=20, pady=20)
 
 
+##### ÁREA DE PROBABILIDADES #####
+
+### PROBABILIDADES ELEMENTALES ###
+def probabilidades_elementales():
+    if df_global is None:
+        messagebox.showwarning("Aviso", "Primero debes cargar un archivo CSV.")
+        return
+    
+    ventana_prob = tk.Toplevel(root)
+    ventana_prob.title("Probabilidades Elementales")
+    ventana_prob.geometry("550x500")
+    
+    tk.Label(ventana_prob, text="Ingrese P(A):").pack(pady=5)
+    entry_pa = tk.Entry(ventana_prob)
+    entry_pa.pack(pady=5)
+    
+    tk.Label(ventana_prob, text="Ingrese P(B):").pack(pady=5)
+    entry_pb = tk.Entry(ventana_prob)
+    entry_pb.pack(pady=5)
+    
+    tk.Label(ventana_prob, text="Ingrese P(B|A) (solo para sucesos dependientes):").pack(pady=5)
+    entry_pba = tk.Entry(ventana_prob)
+    entry_pba.pack(pady=5)
+    
+    tk.Label(ventana_prob, text="Ingrese el espacio muestral Ω (opcional):").pack(pady=5)
+    entry_omega = tk.Entry(ventana_prob)
+    entry_omega.pack(pady=5)
+    
+    tk.Label(ventana_prob, text="Ingrese el tamaño del espacio muestral n (opcional):").pack(pady=5)
+    entry_n = tk.Entry(ventana_prob)
+    entry_n.pack(pady=5)
+    
+    tk.Label(ventana_prob, text="Seleccione el tipo de suceso:").pack(pady=5)
+    tipos_sucesos = [
+        "Sucesos simples",
+        "Sucesos mutuamente excluyentes",
+        "Sucesos no excluyentes",
+        "Sucesos independientes",
+        "Sucesos dependientes"
+    ]
+    combo_tipo = ttk.Combobox(ventana_prob, values=tipos_sucesos, state="readonly")
+    combo_tipo.pack(pady=5)
+    combo_tipo.current(0)
+    
+    resultado_text = tk.Text(ventana_prob, height=12, width=65)
+    resultado_text.pack(pady=10)
+    
+    def calcular_probabilidades():
+        try:
+            pa = float(entry_pa.get())
+            pb = float(entry_pb.get())
+            pba_text = entry_pba.get().strip()
+            pba = float(pba_text) if pba_text else None
+            
+            omega = entry_omega.get().strip()
+            n = entry_n.get().strip()
+            
+            tipo = combo_tipo.get()
+            
+            # Validaciones básicas
+            if not (0 <= pa <= 1 and 0 <= pb <= 1):
+                messagebox.showerror("Error", "P(A) y P(B) deben estar entre 0 y 1.")
+                return
+            if tipo == "Sucesos dependientes" and (pba is None or not (0 <= pba <= 1)):
+                messagebox.showerror("Error", "Para sucesos dependientes, ingresa P(B|A) entre 0 y 1.")
+                return
+            
+            # Validar n si se ingresa
+            n_val = None
+            if n:
+                try:
+                    n_val = int(n)
+                    if n_val <= 0:
+                        messagebox.showerror("Error", "El tamaño del espacio muestral n debe ser un entero positivo.")
+                        return
+                except:
+                    messagebox.showerror("Error", "El tamaño del espacio muestral n debe ser un entero válido.")
+                    return
+            
+            resultado_text.delete("1.0", tk.END)
+            resultado_text.insert(tk.END, f"Tipo de suceso: {tipo}\n")
+            resultado_text.insert(tk.END, f"P(A) = {pa}\n")
+            resultado_text.insert(tk.END, f"P(B) = {pb}\n")
+            if pba is not None:
+                resultado_text.insert(tk.END, f"P(B|A) = {pba}\n")
+            if omega:
+                resultado_text.insert(tk.END, f"Espacio muestral Ω = {omega}\n")
+            if n_val is not None:
+                resultado_text.insert(tk.END, f"Tamaño del espacio muestral n = {n_val}\n")
+            resultado_text.insert(tk.END, "\n")
+            
+            if omega and n_val is not None:
+                resultado_text.insert(tk.END, f"Nota: El espacio muestral '{omega}' tiene tamaño {n_val}.\n\n")
+            
+            if tipo == "Sucesos simples":
+                resultado_text.insert(tk.END, "Sucesos simples: Probabilidades individuales.\n")
+                if n_val is not None:
+                    fa = pa * n_val
+                    fb = pb * n_val
+            
+            elif tipo == "Sucesos mutuamente excluyentes":
+                p_union = pa + pb
+                if p_union > 1:
+                    resultado_text.insert(tk.END, "Advertencia: P(A) + P(B) > 1, no es posible para sucesos excluyentes.\n")
+                resultado_text.insert(tk.END, f"P(A ∩ B) = 0 (por definición)\n")
+                resultado_text.insert(tk.END, f"P(A ∪ B) = P(A) + P(B) = {p_union}\n")
+                if n_val is not None:
+                    fa = pa * n_val
+                    fb = pb * n_val
+            
+            elif tipo == "Sucesos no excluyentes":
+                def pedir_interseccion():
+                    def calcular_interseccion():
+                        try:
+                            p_inter = float(entry_inter.get())
+                            if not (0 <= p_inter <= 1):
+                                messagebox.showerror("Error", "P(A ∩ B) debe estar entre 0 y 1.")
+                                return
+                            p_union = pa + pb - p_inter
+                            if p_union > 1 or p_union < 0:
+                                resultado_text.insert(tk.END, "Advertencia: P(A ∪ B) fuera de rango [0,1].\n")
+                            resultado_text.insert(tk.END, f"P(A ∩ B) = {p_inter}\n")
+                            resultado_text.insert(tk.END, f"P(A ∪ B) = P(A) + P(B) - P(A ∩ B) = {p_union}\n")
+                            if n_val is not None:
+                                fa = pa * n_val
+                                fb = pb * n_val
+                                f_inter = p_inter * n_val
+                            top_inter.destroy()
+                        except:
+                            messagebox.showerror("Error", "Ingresa un valor numérico válido.")
+                    
+                    top_inter = tk.Toplevel(ventana_prob)
+                    top_inter.title("Ingresar P(A ∩ B)")
+                    tk.Label(top_inter, text="Ingrese P(A ∩ B):").pack(pady=5)
+                    entry_inter = tk.Entry(top_inter)
+                    entry_inter.pack(pady=5)
+                    btn_calc_inter = tk.Button(top_inter, text="Calcular", command=calcular_interseccion)
+                    btn_calc_inter.pack(pady=5)
+                
+                pedir_interseccion()
+            
+            elif tipo == "Sucesos independientes":
+                p_inter = pa * pb
+                p_union = pa + pb - p_inter
+                resultado_text.insert(tk.END, f"P(A ∩ B) = P(A) * P(B) = {p_inter}\n")
+                resultado_text.insert(tk.END, f"P(A ∪ B) = P(A) + P(B) - P(A) * P(B) = {p_union}\n")
+                if n_val is not None:
+                    fa = pa * n_val
+                    fb = pb * n_val
+                    f_inter = p_inter * n_val
+            
+            elif tipo == "Sucesos dependientes":
+                p_inter = pa * pba
+                p_union = pa + pb - p_inter
+                resultado_text.insert(tk.END, f"P(A ∩ B) = P(A) * P(B|A) = {p_inter}\n")
+                resultado_text.insert(tk.END, f"P(A ∪ B) = P(A) + P(B) - P(A ∩ B) = {p_union}\n")
+                if n_val is not None:
+                    fa = pa * n_val
+                    fb = pb * n_val
+                    f_inter = p_inter * n_val
+            
+            else:
+                resultado_text.insert(tk.END, "Tipo de suceso no reconocido.\n")
+        
+        except ValueError:
+            messagebox.showerror("Error", "Por favor ingresa valores numéricos válidos para las probabilidades.")
+    
+    btn_calcular = tk.Button(ventana_prob, text="Calcular Probabilidades", command=calcular_probabilidades)
+    btn_calcular.pack(pady=10)
+
+def teorema_de_bayes():
+    if df_global is None:
+        messagebox.showwarning("Aviso", "Primero debes cargar un archivo CSV.")
+        return
+    
+    ventana_bayes = tk.Toplevel(root)
+    ventana_bayes.title("Teorema de Bayes")
+    ventana_bayes.geometry("500x400")
+    
+    tk.Label(ventana_bayes, text="Ingrese P(A):").pack(pady=5)
+    entry_pa = tk.Entry(ventana_bayes)
+    entry_pa.pack(pady=5)
+    
+    tk.Label(ventana_bayes, text="Ingrese P(B|A):").pack(pady=5)
+    entry_pba = tk.Entry(ventana_bayes)
+    entry_pba.pack(pady=5)
+    
+    tk.Label(ventana_bayes, text="Ingrese P(B|¬A):").pack(pady=5)
+    entry_pbna = tk.Entry(ventana_bayes)
+    entry_pbna.pack(pady=5)
+    
+    resultado_text = tk.Text(ventana_bayes, height=10, width=60)
+    resultado_text.pack(pady=10)
+    
+    def calcular_bayes():
+        try:
+            pa = float(entry_pa.get())
+            pba = float(entry_pba.get())
+            pbna = float(entry_pbna.get())
+            
+            if not (0 <= pa <= 1 and 0 <= pba <= 1 and 0 <= pbna <= 1):
+                messagebox.showerror("Error", "Todas las probabilidades deben estar entre 0 y 1.")
+                return
+            
+            pna = 1 - pa
+            denominador = pba * pa + pbna * pna
+            if denominador == 0:
+                messagebox.showerror("Error", "Denominador es cero, revise las probabilidades ingresadas.")
+                return
+            
+            pab = (pba * pa) / denominador
+            
+            resultado_text.delete("1.0", tk.END)
+            resultado_text.insert(tk.END, f"P(A) = {pa}\n")
+            resultado_text.insert(tk.END, f"P(B|A) = {pba}\n")
+            resultado_text.insert(tk.END, f"P(B|¬A) = {pbna}\n")
+            resultado_text.insert(tk.END, f"\nP(¬A) = {pna}\n")
+            resultado_text.insert(tk.END, f"\nP(A|B) = {pab:.6f}\n")
+        
+        except ValueError:
+            messagebox.showerror("Error", "Por favor ingresa valores numéricos válidos para las probabilidades.")
+    
+    btn_calcular = tk.Button(ventana_bayes, text="Calcular P(A|B)", command=calcular_bayes)
+    btn_calcular.pack(pady=10)
+
+def distribuciones_probabilidad():
+    ventana_dist = tk.Toplevel(root)
+    ventana_dist.title("Distribuciones de Probabilidad")
+    ventana_dist.geometry("600x500")
+    
+    tk.Label(ventana_dist, text="Seleccione la distribución:").pack(pady=5)
+    distribuciones = ["Bernoulli", "Binomial", "Poisson"]
+    combo_dist = ttk.Combobox(ventana_dist, values=distribuciones, state="readonly")
+    combo_dist.pack(pady=5)
+    combo_dist.current(0)
+    
+    frame_params = tk.Frame(ventana_dist)
+    frame_params.pack(pady=10)
+    
+    # Parámetros dinámicos según distribución
+    label_param1 = tk.Label(frame_params, text="p (probabilidad de éxito):")
+    entry_param1 = tk.Entry(frame_params)
+    label_param1.grid(row=0, column=0, padx=5, pady=5)
+    entry_param1.grid(row=0, column=1, padx=5, pady=5)
+    
+    label_param2 = tk.Label(frame_params, text="n (número de ensayos):")
+    entry_param2 = tk.Entry(frame_params)
+    # Por defecto oculto, solo para binomial
+    label_param2.grid(row=1, column=0, padx=5, pady=5)
+    entry_param2.grid(row=1, column=1, padx=5, pady=5)
+    
+    label_param3 = tk.Label(frame_params, text="λ (tasa promedio):")
+    entry_param3 = tk.Entry(frame_params)
+    # Por defecto oculto, solo para poisson
+    label_param3.grid(row=2, column=0, padx=5, pady=5)
+    entry_param3.grid(row=2, column=1, padx=5, pady=5)
+    
+    # Ocultar parámetros no usados inicialmente
+    label_param2.grid_remove()
+    entry_param2.grid_remove()
+    label_param3.grid_remove()
+    entry_param3.grid_remove()
+    
+    resultado_text = tk.Text(ventana_dist, height=15, width=70)
+    resultado_text.pack(pady=10)
+    
+    def actualizar_campos(event):
+        dist = combo_dist.get()
+        if dist == "Bernoulli":
+            label_param1.config(text="p (probabilidad de éxito):")
+            label_param1.grid()
+            entry_param1.grid()
+            label_param2.grid_remove()
+            entry_param2.grid_remove()
+            label_param3.grid_remove()
+            entry_param3.grid_remove()
+        elif dist == "Binomial":
+            label_param1.config(text="p (probabilidad de éxito):")
+            label_param1.grid()
+            entry_param1.grid()
+            label_param2.grid()
+            entry_param2.grid()
+            label_param3.grid_remove()
+            entry_param3.grid_remove()
+        elif dist == "Poisson":
+            label_param1.grid_remove()
+            entry_param1.grid_remove()
+            label_param2.grid_remove()
+            entry_param2.grid_remove()
+            label_param3.config(text="λ (tasa promedio):")
+            label_param3.grid()
+            entry_param3.grid()
+    
+    combo_dist.bind("<<ComboboxSelected>>", actualizar_campos)
+    
+    def calcular_distribucion():
+        dist = combo_dist.get()
+        resultado_text.delete("1.0", tk.END)
+        
+        try:
+            if dist == "Bernoulli":
+                p = float(entry_param1.get())
+                if not (0 <= p <= 1):
+                    messagebox.showerror("Error", "p debe estar entre 0 y 1.")
+                    return
+                resultado_text.insert(tk.END, f"Distribución Bernoulli con p = {p}\n\n")
+                # Valores posibles: 0 y 1
+                for x in [0,1]:
+                    prob = bernoulli.pmf(x, p)
+                    resultado_text.insert(tk.END, f"P(X={x}) = {prob:.6f}\n")
+            
+            elif dist == "Binomial":
+                n = int(entry_param2.get())
+                p = float(entry_param1.get())
+                if n <= 0:
+                    messagebox.showerror("Error", "n debe ser un entero positivo.")
+                    return
+                if not (0 <= p <= 1):
+                    messagebox.showerror("Error", "p debe estar entre 0 y 1.")
+                    return
+                resultado_text.insert(tk.END, f"Distribución Binomial con n = {n}, p = {p}\n\n")
+                # Mostrar pmf para x=0..n
+                for x in range(n+1):
+                    prob = binom.pmf(x, n, p)
+                    resultado_text.insert(tk.END, f"P(X={x}) = {prob:.6f}\n")
+            
+            elif dist == "Poisson":
+                lam = float(entry_param3.get())
+                if lam <= 0:
+                    messagebox.showerror("Error", "λ debe ser un número positivo.")
+                    return
+                resultado_text.insert(tk.END, f"Distribución Poisson con λ = {lam}\n\n")
+                # Mostrar pmf para x=0..(lam+4*sqrt(lam)) aprox
+                max_x = int(lam + 4 * (lam**0.5)) + 1
+                for x in range(max_x):
+                    prob = poisson.pmf(x, lam)
+                    resultado_text.insert(tk.END, f"P(X={x}) = {prob:.6f}\n")
+            
+            else:
+                resultado_text.insert(tk.END, "Distribución no reconocida.\n")
+        
+        except ValueError:
+            messagebox.showerror("Error", "Por favor ingresa valores numéricos válidos para los parámetros.")
+    
+    btn_calcular = tk.Button(ventana_dist, text="Calcular Distribución", command=calcular_distribucion)
+    btn_calcular.pack(pady=10)
+
+
 #ÁREA DE VENTANAS CON TKINTER 
 #Ventana principal
 root = tk.Tk()
@@ -592,5 +943,18 @@ btn_frecuencias_simples.pack(side="left", padx=10, pady=10)
 #boton para frecuencias en intervalos
 btn_frecuencias_intervalos = tk.Button(root, text="Calcular Frecuencias por Intervalos", command=frecuencias_intervalos)
 btn_frecuencias_intervalos.pack(side="left", padx=10, pady=10)
+
+#boton para calcular probabilidades elementales
+btn_prob_elementales = tk.Button(root, text="Probabilidades Elementales", command=probabilidades_elementales)
+btn_prob_elementales.pack(side="left", padx=10, pady=10)
+
+#boton para probabilidades con teorema de bayes
+btn_teorema_bayes = tk.Button(root, text="Teorema de Bayes", command=teorema_de_bayes)
+btn_teorema_bayes.pack(side="left", padx=10, pady=10)
+
+#boton para bernoulli
+btn_distribuciones = tk.Button(root, text="Distribuciones de Probabilidad", command=distribuciones_probabilidad)
+btn_distribuciones.pack(side="left", padx=10, pady=10)
+
 
 root.mainloop()
